@@ -85,12 +85,14 @@ void send_packet(struct conn_io *conn_io, const uint8_t *out, size_t len,
     /**********************************************************/
     // send the timestamp
     uint64_t t = getCurrentTime_mic();
+    fprintf(stderr, "t: %lu\n", t);
     out_time = (char *)&t;
     for (int i = 0; i < TIME_SIZE; i++) {
         out_with_time[i] = out_time[i];
     }
 
     // send the one_way_delay
+    fprintf(stderr, "one_way_delay: %lu\n", one_way_delay);
     out_time = (char *)&one_way_delay;
     for (int i = TIME_SIZE, j = 0; j < TIME_SIZE; i++, j++) {
         out_with_time[i] = out_time[j];
@@ -134,9 +136,9 @@ int flush_packets(struct conn_io *conn_io, int path) {
     return 0;
 }
 
-static void debug_log(const char *line, void *argp) {
-    fprintf(stderr, "%s\n", line);
-}
+/* static void debug_log(const char *line, void *argp) { */
+/*     fprintf(stderr, "%s\n", line); */
+/* } */
 
 static void flush_egress(struct conn_io *conn_io, int path) {
     fprintf(stderr, "--flush egress-------\n");
@@ -164,7 +166,7 @@ static void on_read(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf_with_time,
                     const struct sockaddr *addr, unsigned flags) {
     struct conn_io *conn_io = req->data;
     int path = req == conn_io->paths[0] ? 0 : 1;
-    uint8_t buf[MAX_BLOCK_SIZE];
+    static uint8_t buf[MAX_BLOCK_SIZE];
     uint8_t read_time[TIME_SIZE];
     fprintf(stderr, "-----------------recv_cb------------------\n");
 
@@ -336,7 +338,7 @@ int main(int argc, char *argv[]) {
     // TODO use uv_interface_addresses() to get local IP.
     // remote ip1, remote port1, local ip1, local port1, remote ip2, remote
     // port2, local ip2, local port2.
-    printf("endter the main\n");
+    printf("enter the main\n");
     uv_loop_t *loop = uv_default_loop();
     struct conn_io conn_io;
 
@@ -347,7 +349,7 @@ int main(int argc, char *argv[]) {
 
     conn_io.paths[0] = path1;
     conn_io.paths[1] = path2;
-    quiche_enable_debug_logging(debug_log, NULL);
+    /* quiche_enable_debug_logging(debug_log, NULL); */
 
     quiche_config *config = quiche_config_new(0xbabababa);
     if (config == NULL) {
@@ -387,11 +389,11 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    // for(int i=0;i<LOCAL_CONN_ID_LEN; i++)
-    // {
-    //     fprintf(stderr, "%x", scid[i]);
-    // }
-    // fprintf(stderr, "\nclient scid\n");
+    for(int i=0;i<LOCAL_CONN_ID_LEN; i++)
+    {
+        fprintf(stderr, "%x", scid[i]);
+    }
+    fprintf(stderr, "\nclient scid\n");
 
     quiche_conn *conn =
         quiche_connect(argv[1], (const uint8_t *)scid, sizeof(scid), config);

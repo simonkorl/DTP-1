@@ -102,9 +102,9 @@ uint8_t server_pcid[LOCAL_CONN_ID_LEN];
 uint8_t client_pcid[LOCAL_CONN_ID_LEN];
 
 static void timeout_cb(uv_timer_t *timer);
-static void debug_log(const char *line, void *argp) {
-    fprintf(stderr, "%s\n", line);
-}
+/* static void debug_log(const char *line, void *argp) { */
+/*     fprintf(stderr, "%s\n", line); */
+/* } */
 
 // called after the data was sent
 static void on_send(uv_udp_send_t *req, int status) {
@@ -131,6 +131,7 @@ void send_packet(uv_udp_t *handle, const struct sockaddr *peer_addr,
     // send the timestamp
     uint64_t t = getCurrentTime_mic();
     out_time = (char *)&t;
+    fprintf(stderr, "t: %lu\n", t);
     for (int i = 0; i < TIME_SIZE; i++) {
         out_with_time[i] = out_time[i];
     }
@@ -351,9 +352,10 @@ static struct conn_io *create_conn(uint8_t *odcid, size_t odcid_len) {
 
 static void on_read(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf_with_time,
                     const struct sockaddr *addr, unsigned flags) {
-    struct connections *conns = req->data;
+    /* struct connections *conns = req->data; */
     struct conn_io *tmp, *conn_io = NULL;
-    uint8_t buf[MAX_BLOCK_SIZE];
+    static uint8_t buf[MAX_BLOCK_SIZE];
+    memset(buf, 0, sizeof(buf));
     uint8_t read_time[TIME_SIZE];
     uint8_t out_process[MAX_DATAGRAM_SIZE];
     static uint8_t first_pkt_of_second_path[] = "Second";
@@ -362,6 +364,7 @@ static void on_read(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf_with_time,
     for (int i = 0; i < TIME_SIZE; i++) {
         read_time[i] = buf_with_time->base[i];
     }
+    fprintf(stderr, "timestamp: %" PRIu64 "\n", *(uint64_t *)read_time);
     // get one way delay
     for (int i = TIME_SIZE, j = 0; j < TIME_SIZE; i++, j++) {
         read_time[j] = buf_with_time->base[i];
@@ -570,7 +573,7 @@ static void timeout_cb(uv_timer_t *timer) {
 }
 
 uv_udp_t *init_echo_udp_server(uv_loop_t *loop, const char *address,
-                               uint16_t port) {
+                               uint16_t port, struct connections* c) {
     uv_udp_t *recv_socket = malloc(sizeof(uv_udp_t));
     struct sockaddr_in recv_addr;
     uv_ip4_addr(address, port, &recv_addr);
@@ -587,6 +590,7 @@ uv_udp_t *init_echo_udp_server(uv_loop_t *loop, const char *address,
         perror("uv_udp_bind failed");
         exit(-1);
     }
+    recv_socket->data = c;
     r = uv_udp_recv_start(recv_socket, alloc_buffer, on_read);
     if (r < 0) {
         perror("uv_udp_recv_start failed");
@@ -599,8 +603,8 @@ int main(int argc, char *argv[]) {
     loop = uv_default_loop();
 
     struct connections c;
-    c.paths[0] = init_echo_udp_server(loop, argv[1], atoi(argv[2]));
-    c.paths[1] = init_echo_udp_server(loop, argv[3], atoi(argv[4]));
+    c.paths[0] = init_echo_udp_server(loop, argv[1], atoi(argv[2]), &c);
+    c.paths[1] = init_echo_udp_server(loop, argv[3], atoi(argv[4]), &c);
 
     const char *dtp_cfg_fname = argv[5];
     int cfgs_len;
@@ -622,7 +626,7 @@ int main(int argc, char *argv[]) {
     memset(client_pcid, 0x33, sizeof(client_pcid));
     // ***********************************************************************************
 
-    quiche_enable_debug_logging(debug_log, NULL);
+    /* quiche_enable_debug_logging(debug_log, NULL); */
 
     config = quiche_config_new(QUICHE_PROTOCOL_VERSION);
     if (config == NULL) {

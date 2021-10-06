@@ -6,7 +6,7 @@ LIB_DIR = $(BUILD_DIR)/release
 INCLUDE_DIR = ../include
 
 INCS = -I$(INCLUDE_DIR)
-CFLAGS = -I. -Wall -Werror -pedantic -fsanitize=address -g
+CFLAGS = -I. -Wall -pedantic -fsanitize=address -g
 
 ifeq ($(OS), Darwin)
 CFLAGS += -framework Security
@@ -19,7 +19,7 @@ LDFLAGS = -L$(LIBCRYPTO_DIR) -L$(LIBSSL_DIR) -L$(LIB_DIR)
 
 LIBS = $(LIB_DIR)/libquiche.a -lev -ldl -pthread -lm -luv
 
-all: client server 
+all: client server
 
 client: client.c $(INCLUDE_DIR)/quiche.h $(LIB_DIR)/libquiche.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@ $(INCS) $(LIBS)
