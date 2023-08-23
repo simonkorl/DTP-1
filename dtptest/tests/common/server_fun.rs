@@ -26,7 +26,7 @@ type ClientMap = HashMap<quiche::ConnectionId<'static>, Client>;
 // use for record stream id and data to file.then can use python to analysis
 fn handle_stream(client: &mut Client, stream_id: u64, buf: &[u8]) {
     let conn = &mut client.conn;
-    info!(
+    debug!(
         "{} got GET request for {:?} on stream {}",
         conn.trace_id(),
         buf,
@@ -43,7 +43,7 @@ fn handle_stream(client: &mut Client, stream_id: u64, buf: &[u8]) {
             let data = format!("{} {}", stream_id, String::from_utf8_lossy(buf));
             file.write_all(data.as_bytes()).unwrap();
         }
-        file.write_all(b"\n").unwrap();
+        // file.write_all(b"\n").unwrap();
         file.flush().unwrap();
     }
 
@@ -415,19 +415,29 @@ pub fn run_server(listen_addr: &str) {
             }
         }
 
+        let mut exit_falg = false;
         // Garbage collect closed connections.
         clients.retain(|_, ref mut c| {
             debug!("Collecting garbage");
 
             if c.conn.is_closed() {
-                info!(
+                debug!(
                     "{} connection collected {:?}",
                     c.conn.trace_id(),
                     c.conn.stats()
+                );
+                exit_falg = true;
+                println!(
+                    "\nPlease check the result in tests/result,file name is {}",
+                    c.conn.trace_id()
                 );
             }
 
             !c.conn.is_closed()
         });
+        if exit_falg {
+            break 'outmost;
+        }
     }
+    println!("server exit");
 }

@@ -78,7 +78,7 @@ pub fn run_client(peer_addr: &str, file_path: &str) {
     let req_start = std::time::Instant::now();
     let mut send_offset = 0;
     let mut send_block_count = 1;
-    loop {
+    'outmost: loop {
         poll.poll(&mut events, conn.timeout()).unwrap();
         for event in &events {
             // Read incoming UDP packets from the socket and feed them to quiche,
@@ -204,39 +204,68 @@ pub fn run_client(peer_addr: &str, file_path: &str) {
                 }
             } else if event.is_writable() {
                 if conn.is_established() {
-                    println!("established");
                     // Send an HTTP request as soon as the connection is established.
                     let mut file = File::open(file_path).unwrap();
                     let stream_capcity = 1024;
                     let mut buf = Vec::with_capacity(stream_capcity);
                     file.seek(std::io::SeekFrom::Start(send_offset)).unwrap();
-                    file.take(1024).read_to_end(&mut buf).unwrap();
-                    println!("buf:{}", String::from_utf8(buf.clone()).unwrap());
+                    let ret = file.take(1024).read_to_end(&mut buf).unwrap();
+                    info!("read file ret:{}", ret);
+                    if ret == 0 {
+                        conn.close(true, 0x00, b"finished").unwrap();
+                        break 'outmost;
+                    }
+                    // println!("buf:{}", String::from_utf8(buf.clone()).unwrap());
                     let block = std::sync::Arc::new(quiche::Block {
                         size: 1024,
                         priority: 0,
-                        deadline: 200,
+                        deadline: 900000,
                     });
-                    // if let Err(e) =
-                    //     conn.stream_send(HTTP_REQ_STREAM_ID, &buf, false)
-                    // {
-                    //     error!("send failed: {:?}", e);
-                    // } else {
-                    //     send_offset += 1024;
-                    // }
-                    if let Err(e) = conn.block_send(
-                        HTTP_REQ_STREAM_ID * send_block_count,
-                        &buf,
-                        false,
-                        block,
-                    ) {
-                        error!("send failed: {:?}", e);
+                    //if use stream_send set true,else set false
+                    if true {
+                        if let Err(e) =
+                            conn.stream_send(HTTP_REQ_STREAM_ID, &buf, false)
+                        {
+                            error!("send failed: {:?}", e);
+                        } else {
+                            send_offset += 1024;
+                        }
                     } else {
-                        send_offset += 1024;
-                        send_block_count += 1;
+                        match conn.block_send(
+                            HTTP_REQ_STREAM_ID,
+                            &buf,
+                            false,
+                            block,
+                        ) {
+                            Err(e) => {
+                                error!("send failed: {:?}", e);
+                            },
+                            Ok(v) => {
+                                println!("block send success send v:{}", v);
+                                if v == 0 {
+                                    conn.close(true, 0x00, b"finished").unwrap();
+                                    break 'outmost;
+                                }
+                                send_offset += 1024;
+                                // send_block_count += 1;
+                            },
+                        }
+                        // if let Err(e) = conn.block_send(
+                        //     // HTTP_REQ_STREAM_ID * send_block_count,
+                        //     HTTP_REQ_STREAM_ID,
+                        //     &buf,
+                        //     false,
+                        //     block,
+                        // ) {
+                        //     error!("send failed: {:?}", e);
+                        // } else {
+                        //     send_offset += 1024;
+                        //     // send_block_count += 1;
+                        // }
                     }
                 }
             } else {
+                panic!("unexpected event {:?}", event);
             }
         }
     }

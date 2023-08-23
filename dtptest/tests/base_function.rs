@@ -17,10 +17,12 @@ use common::{client_fun::run_client, server_fun::run_server};
 #[test]
 fn test_connect() {
     common::log_init();
-    thread::spawn(|| {
+    let handle = thread::spawn(|| {
         run_server("127.0.0.1:4433");
     });
     run_client("127.0.0.1:4433", "tests/5m.txt");
+    handle.join().unwrap();
+    println!("END TEST");
 }
 #[test]
 #[ignore = "the test for read a big file,and print it"]
