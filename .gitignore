@@ -3,3 +3,8 @@
 **/Cargo.lock
 **/*.*qlog
 **/build
+**/*.txt
+**/client
+**/server
+**/http3-client
+**/http3-server
