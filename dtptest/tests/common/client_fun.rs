@@ -206,23 +206,31 @@ pub fn run_client(peer_addr: &str, file_path: &str) {
                 if conn.is_established() {
                     // Send an HTTP request as soon as the connection is established.
                     let mut file = File::open(file_path).unwrap();
+                    //get the file data size
+                    let file_size = file.metadata().unwrap().len();
+
                     let stream_capcity = 1024;
                     let mut buf = Vec::with_capacity(stream_capcity);
                     file.seek(std::io::SeekFrom::Start(send_offset)).unwrap();
-                    let ret = file.take(1024).read_to_end(&mut buf).unwrap();
+                    let ret = file
+                        .take(stream_capcity as u64)
+                        .read_to_end(&mut buf)
+                        .unwrap();
                     info!("read file ret:{}", ret);
                     if ret == 0 {
                         conn.close(true, 0x00, b"finished").unwrap();
                         break 'outmost;
                     }
+
                     // println!("buf:{}", String::from_utf8(buf.clone()).unwrap());
                     let block = std::sync::Arc::new(quiche::Block {
-                        size: 1024,
+                        size: file_size,
                         priority: 0,
-                        deadline: 900000,
+                        deadline: 0xffffffff,
                     });
                     //if use stream_send set true,else set false
-                    if true {
+                    //check env IS_STREAM_SEND
+                    if std::env::var("IS_STREAM_SEND").unwrap() == "true" {
                         if let Err(e) =
                             conn.stream_send(HTTP_REQ_STREAM_ID, &buf, false)
                         {
@@ -231,6 +239,7 @@ pub fn run_client(peer_addr: &str, file_path: &str) {
                             send_offset += 1024;
                         }
                     } else {
+                        // use block_sends
                         match conn.block_send(
                             HTTP_REQ_STREAM_ID,
                             &buf,

@@ -15,14 +15,25 @@ use common::{client_fun::run_client, server_fun::run_server};
 //例如：RUST_LOG=debug LOG_PURE=true cargo test -- --nocapture
 //LOG_PURE 会生成一个纯净的日志，不包含stream_id，信息由sever端产生，每个连接的传输数据会被生成到result目录下
 #[test]
-fn test_connect() {
+fn test_transport_file() {
     common::log_init();
+    env::set_var("LOG_PURE", "true");
+    env::set_var("IS_STREAM_SEND", "false");
     let handle = thread::spawn(|| {
         run_server("127.0.0.1:4433");
     });
-    run_client("127.0.0.1:4433", "tests/5m.txt");
+    run_client("127.0.0.1:4433", "tests/1G.txt");
     handle.join().unwrap();
     println!("END TEST");
+}
+#[test]
+fn test_env_set() {
+    env::set_var("RUST_ENV_TEST", "RUT_ENV_TEST");
+    let handle = thread::spawn(|| {
+        let env = env::var("RUST_ENV_TEST").unwrap();
+        assert!(env == "RUT_ENV_TEST");
+    });
+    handle.join().unwrap();
 }
 #[test]
 #[ignore = "the test for read a big file,and print it"]
