@@ -1,0 +1,18 @@
+[package]
+name = "dtptest"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+quiche = { path = "../quiche", features = ["dtp"] }
+env_logger = "0.10.0"
+log = "0.4.19"
+mio = { version = "0.8.8", features = ["net", "os-ext"] }
+ring = "0.16.20"
+url = "2.4.0"
+[features]
+default = ["record"]
+record = []
+record_pure = ["record"]
