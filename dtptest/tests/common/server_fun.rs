@@ -42,6 +42,7 @@ fn handle_stream(client: &mut Client, stream_id: u64, buf: &[u8]) {
         } else {
             let data = format!("{} {}", stream_id, String::from_utf8_lossy(buf));
             file.write_all(data.as_bytes()).unwrap();
+            file.write_all(b"\n").unwrap();
         }
         // file.write_all(b"\n").unwrap();
         file.flush().unwrap();
@@ -419,7 +420,6 @@ pub fn run_server(listen_addr: &str) {
         // Garbage collect closed connections.
         clients.retain(|_, ref mut c| {
             debug!("Collecting garbage");
-
             if c.conn.is_closed() {
                 debug!(
                     "{} connection collected {:?}",

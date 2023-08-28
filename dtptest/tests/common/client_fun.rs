@@ -78,23 +78,20 @@ pub fn run_client(peer_addr: &str, file_path: &str) {
     let req_start = std::time::Instant::now();
     let mut send_offset = 0;
     let mut send_block_count = 1;
+    let mut req_once = false;
     'outmost: loop {
         poll.poll(&mut events, conn.timeout()).unwrap();
+        if events.is_empty() {
+            debug!("timed out");
+
+            conn.on_timeout();
+            break 'outmost;
+        }
         for event in &events {
             // Read incoming UDP packets from the socket and feed them to quiche,
             // until there are no more packets to read.
             if event.is_readable() {
                 'read: loop {
-                    // If the event loop reported no events, it means that the timeout
-                    // has expired, so handle it without attempting to read packets. We
-                    // will then proceed with the send loop.
-                    if events.is_empty() {
-                        debug!("timed out");
-
-                        conn.on_timeout();
-                        break 'read;
-                    }
-
                     let (len, from) = match socket.recv_from(&mut buf) {
                         Ok(v) => v,
 
@@ -204,73 +201,105 @@ pub fn run_client(peer_addr: &str, file_path: &str) {
                 }
             } else if event.is_writable() {
                 if conn.is_established() {
-                    // Send an HTTP request as soon as the connection is established.
-                    let mut file = File::open(file_path).unwrap();
-                    //get the file data size
-                    let file_size = file.metadata().unwrap().len();
-
-                    let stream_capcity = 1024;
-                    let mut buf = Vec::with_capacity(stream_capcity);
-                    file.seek(std::io::SeekFrom::Start(send_offset)).unwrap();
-                    let ret = file
-                        .take(stream_capcity as u64)
-                        .read_to_end(&mut buf)
-                        .unwrap();
-                    info!("read file ret:{}", ret);
-                    if ret == 0 {
-                        conn.close(true, 0x00, b"finished").unwrap();
-                        break 'outmost;
-                    }
-
-                    // println!("buf:{}", String::from_utf8(buf.clone()).unwrap());
-                    let block = std::sync::Arc::new(quiche::Block {
-                        size: file_size,
-                        priority: 0,
-                        deadline: 0xffffffff,
-                    });
-                    //if use stream_send set true,else set false
-                    //check env IS_STREAM_SEND
-                    if std::env::var("IS_STREAM_SEND").unwrap() == "true" {
-                        if let Err(e) =
-                            conn.stream_send(HTTP_REQ_STREAM_ID, &buf, false)
-                        {
-                            error!("send failed: {:?}", e);
-                        } else {
-                            send_offset += 1024;
-                        }
-                    } else {
-                        // use block_sends
-                        match conn.block_send(
+                    if std::env::var("IS_TEST_ORDER").unwrap() == "true"
+                        && req_once == false
+                    {
+                        req_once = true;
+                        let string1 = String::from("Hello priority 200");
+                        let string2 = String::from("World priority 100");
+                        let block1 = std::sync::Arc::new(quiche::Block {
+                            size: string1.len() as u64,
+                            priority: 200,
+                            deadline: 0xffffffff,
+                        });
+                        let block2 = std::sync::Arc::new(quiche::Block {
+                            size: string2.len() as u64,
+                            priority: 100,
+                            deadline: 0xffffffff,
+                        });
+                        conn.block_send(
                             HTTP_REQ_STREAM_ID,
-                            &buf,
-                            false,
-                            block,
-                        ) {
-                            Err(e) => {
-                                error!("send failed: {:?}", e);
-                            },
-                            Ok(v) => {
-                                println!("block send success send v:{}", v);
-                                if v == 0 {
-                                    conn.close(true, 0x00, b"finished").unwrap();
-                                    break 'outmost;
-                                }
-                                send_offset += 1024;
-                                // send_block_count += 1;
-                            },
+                            string1.as_bytes(),
+                            true,
+                            block1,
+                        )
+                        .unwrap();
+                        conn.block_send(
+                            HTTP_REQ_STREAM_ID * 2,
+                            string2.as_bytes(),
+                            true,
+                            block2,
+                        )
+                        .unwrap();
+                    } else if std::env::var("IS_TEST_ORDER").unwrap() == "false" {
+                        let mut file = File::open(file_path).unwrap();
+                        //get the file data size
+                        let file_size = file.metadata().unwrap().len();
+
+                        let stream_capcity = 1024;
+                        let mut buf = Vec::with_capacity(stream_capcity);
+                        file.seek(std::io::SeekFrom::Start(send_offset)).unwrap();
+                        let ret = file
+                            .take(stream_capcity as u64)
+                            .read_to_end(&mut buf)
+                            .unwrap();
+                        info!("read file ret:{}", ret);
+                        if ret == 0 {
+                            conn.close(true, 0x00, b"finished").unwrap();
+                            break 'outmost;
                         }
-                        // if let Err(e) = conn.block_send(
-                        //     // HTTP_REQ_STREAM_ID * send_block_count,
-                        //     HTTP_REQ_STREAM_ID,
-                        //     &buf,
-                        //     false,
-                        //     block,
-                        // ) {
-                        //     error!("send failed: {:?}", e);
-                        // } else {
-                        //     send_offset += 1024;
-                        //     // send_block_count += 1;
-                        // }
+
+                        // println!("buf:{}", String::from_utf8(buf.clone()).unwrap());
+                        let block = std::sync::Arc::new(quiche::Block {
+                            size: file_size,
+                            priority: 0,
+                            deadline: 0xffffffff,
+                        });
+                        //if use stream_send set true,else set false
+                        //check env IS_STREAM_SEND
+                        if std::env::var("IS_STREAM_SEND").unwrap() == "true" {
+                            if let Err(e) =
+                                conn.stream_send(HTTP_REQ_STREAM_ID, &buf, false)
+                            {
+                                error!("send failed: {:?}", e);
+                            } else {
+                                send_offset += 1024;
+                            }
+                        } else {
+                            // use block_sends
+                            match conn.block_send(
+                                HTTP_REQ_STREAM_ID,
+                                &buf,
+                                false,
+                                block,
+                            ) {
+                                Err(e) => {
+                                    error!("send failed: {:?}", e);
+                                },
+                                Ok(v) => {
+                                    debug!("block send success send v:{}", v);
+                                    if v == 0 {
+                                        conn.close(true, 0x00, b"finished")
+                                            .unwrap();
+                                        break 'outmost;
+                                    }
+                                    send_offset += 1024;
+                                    // send_block_count += 1;
+                                },
+                            }
+                            // if let Err(e) = conn.block_send(
+                            //     // HTTP_REQ_STREAM_ID * send_block_count,
+                            //     HTTP_REQ_STREAM_ID,
+                            //     &buf,
+                            //     false,
+                            //     block,
+                            // ) {
+                            //     error!("send failed: {:?}", e);
+                            // } else {
+                            //     send_offset += 1024;
+                            //     // send_block_count += 1;
+                            // }
+                        }
                     }
                 }
             } else {
