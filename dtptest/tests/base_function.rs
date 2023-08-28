@@ -18,13 +18,16 @@ use common::{client_fun::run_client, server_fun::run_server};
 #[test]
 fn test_transport_file() {
     common::log_init();
+    // 纯净log:不包含stream_id
     env::set_var("LOG_PURE", "true");
+    // 是否使用stream发送数据,默认是false,使用的是block_send
     env::set_var("IS_STREAM_SEND", "false");
+    // 是否测试传输顺序,默认是false,这里测试文件传输，设置false，不能不写，因为程序需要获得所以也要设置。
     env::set_var("IS_TEST_ORDER", "false");
     let handle = thread::spawn(|| {
         run_server("127.0.0.1:4433");
     });
-    run_client("127.0.0.1:4433", "tests/1m.txt");
+    run_client("127.0.0.1:4433", "tests/1G.txt");
     handle.join().unwrap();
     println!("END TEST");
 }
